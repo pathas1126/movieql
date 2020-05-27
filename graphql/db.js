@@ -1,4 +1,4 @@
-export const movies = [
+export let movies = [
   {
     id: 0,
     name: "Star Wars",
@@ -26,6 +26,7 @@ export const getById = (id) => {
 export const deleteMovie = (id) => {
   const cleanedMovies = movies.filter((movie) => movie.id !== id);
   if (movies.length > cleanedMovies.length) {
+    movies = cleanedMovies;
     return true;
   } else {
     return false;
@@ -33,9 +34,17 @@ export const deleteMovie = (id) => {
 };
 
 export const addMovie = (name, score) => {
-  movie.push({
-    id: movies.length,
+  const newMovie = {
+    id: `${movies.length}`,
     name,
     score,
-  });
+  };
+  movies.push(newMovie);
+  return newMovie;
 };
+
+// export const deleteMovie = (id) => {
+//   const deletedMovie = movies[id];
+//   movies.shift(id - 1, 1);
+//   return deletedMovie;
+// };

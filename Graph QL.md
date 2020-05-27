@@ -234,3 +234,194 @@ export const getMovies = (limit, rating) => {
 - node-fetch, axios 등의 라이브러리 사용 가능
 - 리졸버 함수 내부에서 API 요청 후 목표 데이터 반환
 
+# React.js + Apollo
+
+> 클라이언트 측에서 React와 Apollo를 이용해서 GraphQL API를 사용하는 방법을 다룸
+
+## 패키지 설치
+
+```bash
+$ yarn add styled-components react-router-dom apollo-boost @apollo/react-hooks graphql
+```
+
+- styled-components: 컴포넌트 스타일링 라이브러리
+- react-router-dom: 리액트에서 사용하는 라우팅 라이브러리
+- apollo-boost: 클라이언트에서 GraphQL과 상호작용하기 위해 필요한 모든 설정이 이미 되어 있는 패키지
+- @apollo/react-hooks: 아폴로에서 리액트 훅스를 사용하기 위한 라이브러리
+- graphql: GraphQL을 사용하기 위한 패키지
+
+## 스타일 초기화
+
+- https://meyerweb.com/eric/tools/css/reset/ 에서 css를 복사해서 public/reset.css 파일을 만들고,
+  index.html에서 link 태그로 연결, html 엘리먼트의 기본 스타일을 완전히 초기화하는 데 사용
+
+## 라우팅
+
+> App.js에서 라우팅 설정
+
+```jsx
+import { HashRouter as Router, Route, Switch } from "react-router-dom";
+import Home from "../routes/Home";
+import Detail from "../routes/Detail";
+
+function App() {
+  return (
+    <Router>
+      <Switch>
+        <Route path="/:id" component={Detail} />
+        <Route path="/" component={Home} />
+      </Switch>
+    </Router>
+  );
+}
+
+export default App;
+```
+
+- HashRouter: url에 #를 추가하며, 전체 라우트를 감싸주는 라우터
+- Route: 각각의 경로에 대해 렌더링할 컴포넌트 지정
+- Switch: Route의 exact 속성 대신 사용할 수 있는 컴포넌트로,
+  비교의 기준이 되는 태그를 가장 아래쪽에 배치
+
+## Apollo 초기화
+
+> apollo-boost를 이용해서 아폴로 클라이언트 초기화
+
+### 아폴로 클라이언트 인스턴스 생성
+
+> src/apollo.js 파일 작성
+
+```javascript
+import ApolloClient from "apollo-boost";
+
+const client = new ApolloClient({
+  uri: "http://localhost:4000",
+});
+
+export default client;
+```
+
+- 아폴로는 단 하나의 엔드포인트를 갖기 때문에 uri에 통신을 원하는 GraphQL API의 주소를 입력
+- ApolloProvider에서 사용해야 하기 때문에 export 키워드로 내보냄
+- 현재는 로컬 호스트의 4000번 포트에서 작동하기 때문에 해당 uri를 입력
+
+### 아폴로 프로바이더로 리액트 앱 감싸기
+
+> 리액트에서 아폴로를 사용하기 위해 ApolloProvider로 리액트 앱 전체를 감쌈
+> src/index.js 파일을 아래와 같이 수정
+
+```jsx
+import React from "react";
+import ReactDOM from "react-dom";
+import App from "./components/App";
+import { ApolloProvider } from "@apollo/react-hooks";
+import client from "./apollo";
+
+ReactDOM.render(
+  <ApolloProvider client={client}>
+    <App />
+  </ApolloProvider>,
+  document.getElementById("root")
+);
+```
+
+- ApolloProvider는 @apollo/react-hooks 패키지에서 제공
+- 아폴로 프로바이더 컴포넌트로 리액트 앱 전체 감싸기
+- 아폴로 프로바이더의 client 속성으로 클라이언트 인스턴스 입력
+- 프로젝트를 실행해 보고 개발자 도구의 console, network 탭에 문제가 없다면 성공적으로 연결된 것
+
+## 리액트에서 Query 사용하기
+
+### 매개변수가 없거나 고정된 값을 전달 받는  경우
+
+> 쿼리에 매개변수가 없거나 고정된 값을 입력하는 경우에는 단순하게 쿼리만 작성하면 됨
+> src/components/Home.js 코드
+
+```jsx
+import React from "react";
+import { gql } from "apollo-boost";
+import { useQuery } from "@apollo/react-hooks";
+import styled from "styled-components";
+import Movie from "../components/Movie";
+
+// style code ...
+
+const GET_MOVIES = gql`
+  query {
+    movies(limit: 20, rating: 9) {
+      id
+      medium_cover_image
+    }
+  }
+`;
+
+export default () => {
+  const { loading, data } = useQuery(GET_MOVIES);
+  return (
+    <Container>
+      <Header>
+        <Title>React-Apollo 2020</Title>
+        <SubTitle>I Love GraphQL</SubTitle>
+      </Header>
+      {loading && <Loading>Loading...</Loading>}
+      {!loading &&
+        data.movies &&
+        data.movies.map((movie) => <Movie key={movie.id} id={movie.id} />)}
+    </Container>
+  );
+};
+```
+
+- 자바스크립트는 자체적으로 GraphQL을 이해하지 못하기 때문에 apollo-boost의 gql 메서드를 사용
+- @apollo/react-hooks의 useQuery를 이용해서 gql 메서드로 작성한 쿼리 사용 가능
+- 쿼리로 요청한 데이터만 전달 받기 때문에 정확히 필요한 데이터만 받아서 사용할 수 있음
+
+### 매개변수를 동적(variables)으로 전달받는 경우
+
+> Movie.js 에서 Link 태그로 
+
+```jsx
+import React from "react";
+import { useParams } from "react-router-dom";
+import { gql } from "apollo-boost";
+import { useQuery } from "@apollo/react-hooks";
+
+const GET_MOVIE = gql`
+  query getMovie($id: Int!) {
+    movie(id: $id) {
+      id
+      title_long
+      medium_cover_image
+      description_full
+    }
+  }
+`;
+
+export default () => {
+  const { id } = useParams();
+  const { loading, data } = useQuery(GET_MOVIE, {
+    variables: { id: Number(id) },
+  });
+  if (loading) {
+    return "loading";
+  }
+  if (data && data.movie) {
+    return <h1>{data.movie.title_long}</h1>;
+  }
+};
+```
+
+- Apollo가 매개변수의 타입을 검사할 수 있도록 쿼리의 이름과 $ 기호를 사용해서 매개변수를 작성
+  *※ GraphQL API에서 정의한 타입과 일치하는 지 확인해야 하기 때문에 타입 검사 실행*
+- 쿼리의 이름은 임의로 작성해도 되지만 매개변수의 형식은 GraphQL에서 정의한 형식과 같아야 함
+- query { } 내부의 쿼리는 서버로 전송
+- $ 기호를 사용한 부분이 useQuery에서 variables로 넘기는 실제 데이터가 들어가는 부분이라고 생각하면 됨
+
+## Cache
+
+> Apollo에는 Cache 기능이 있기 때문에 요청을 자주 보내지 않을 수 있게 됨
+> REST와 리덕스를 사용한다면 직접 구현해야 함
+
+## Apollo Client Developer Tools
+
+> 크롬 익스텐션, 캐시와 같은 아폴로 관련 정보를 볼 수 있음

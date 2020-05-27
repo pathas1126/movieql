@@ -47,20 +47,190 @@ $ yarn graphql-yoga
 > GraphQL 서버를 쉽게 구축할 수 있게 도와주는 라이브러리
 > https://github.com/prisma-labs/graphql-yoga
 
+```javascript
+import { GraphQLServer } from "graphql-yoga";
+import resolvers from "./graphql/resolvers";
 
+const server = new GraphQLServer({
+  typeDefs: "graphql/schema.graphql",
+  resolvers,
+});
+
+server.start(() => console.log("GraphQL Server Running"));
+```
+
+- graphql-yoga만 설치해도 GraphQL 서버 구축 가능
+- 위의 코드처럼 간단하게 서버를 띄울 수 있으며 기본적으로 4000번 포트에서 구동
+- 4000번 포트로 접속하면 GraphQL 서버와 상호작용할 수 있는 PlayGround 사용 가능
+- node.js에서 import 문을 사용하기 위해서는 아래와 같은 패키지 설치와 스크립트의 수정이 필요
+- `yarn add ~ --dev` 옵션을 사용하면 개발 의존성으로 패키지 설치 가능
+
+```json
+{
+  // ...
+  "dependencies": {
+    "graphql-yoga": "^1.18.3"
+  },
+  "scripts": {
+    "start": "nodemon --exec babel-node index.js"
+  },
+  "devDependencies": {
+    "babel-node": "^0.0.1-security",
+    "babel-preset-env": "^1.7.0",
+    "babel-preset-stage-3": "^6.24.1"
+  }
+}
+```
 
 ## Schema
 
 > 사용자에게 보내거나 사용자로부터 받을 데이터에 대한 설명
 
+```typescript
+// graphql/schema.graphql
+
+type Movie {
+  id: Int!
+  name: String!
+  score: Int!
+}
+
+type Query {
+  movies: [Movie]!
+  movie(id: Int!): Movie
+}
+
+type Mutation {
+  addMovie(name: String!, score: Int!): Movie!
+  deleteMovie(id: Int!): Boolean!
+}
+```
+
+- 타입 키워드를 이용해서 데이터(객체) 형식과 쿼리, 뮤테이션에 대해 정의
+- 데이터 타입에 대해서는 해당 타입이 갖는 값들에 대한 자료형 정의
+- 쿼리와 뮤테이션에서는 매개변수 타입과 반환값 타입 정의
+- ! (느낌표)는 not null, isRequired와 같이 값을 반드시 필요로 함을 뜻함
+- [] (대괄호)는 자료형이 배열임을 뜻함
+
 ### Query
 
 > 데이터베이스에서 데이터를 조회할 때만 사용
+
+```typescript
+// 정의
+type Query {
+  movies: [Movie]!
+  movie(id: Int!): Movie
+}
+
+// 사용예
+query {
+  movies {
+    name
+    score
+    id
+  }
+}
+
+// 반환값
+{
+  "data": {
+    "movies": [
+      {
+        "name": "Logan",
+        "score": 5,
+        "id": 1
+      },
+      {
+        "name": "LaLa Land",
+        "score": 10,
+        "id": 2
+      }
+    ]
+  }
+}
+```
 
 ### Mutation
 
 > 데이터베이스의 데이터를 입력, 수정, 삭제할 때 사용
 
+```typescript
+// 정의
+type Mutation {
+  addMovie(name: String!, score: Int!): Movie!
+  deleteMovie(id: Int!): Boolean!
+}
+
+// PlayGround 사용예
+mutation {
+  addMovie(name: "Garden of Words", score: 10){
+    name
+  }
+}
+
+// 반환값
+{
+  "data": {
+    "addMovie": {
+      "name": "Garden of Words"
+    }
+  }
+}
+```
+
 ## resolvers
 
 > query는 Database에게 문제 같은 것이기 때문에 리졸버를 통해서 해당 쿼리를 resolve(해결)해야 함
+> 다시 말해서, 위에서 정의하기만 해서는 쿼리나 뮤테이션을 사용할 수 없기 때문에 그것을 사용할 수 있도록 하는 리졸버를 작성해야 함
+
+```javascript
+import { addMovie, getMovies, getById, deleteMovie } from "./db";
+
+const resolvers = {
+  Query: {
+    movies: () => getMovies(),
+    movie: (_, { id }) => getById(id),
+  },
+  Mutation: {
+    addMovie: (_, { name, score }) => addMovie(name, score),
+    deleteMovie: (_, { id }) => deleteMovie(id),
+  },
+};
+
+export default resolvers;
+```
+
+- 리졸버는 쿼리와 뮤테이션으로 정의했던 함수들의 실질적인 사용을 나타냄
+- GraphQL 서버를 가동할 때 typeDefs와 더불어 반드시 resolvers가 반드시 필요
+- 첫 번째 매개변수는 루트 Query의 이전 객체로 거의 사용되지 않기 때문에 _(언더바)로 표현
+- 두 번째 매개변수에 실질적인 인수들이 들어감
+- 세 번째 매개변수는 context로 현재 로그인한 사용자, 데이터베이스 액세스와 같은 중요한 문맥 정보를 보유
+
+[참고: https://graphql-kr.github.io/learn/execution/]
+
+## GraphQL로 REST API 감싸기
+
+> GraphQL에서도 REST API를 통해 데이터를 받아올 수 있음
+
+```javascript
+const API_URL = "https://yts.am/api/v2/list_movies.json?";
+import fetch from "node-fetch";
+
+export const getMovies = (limit, rating) => {
+  let REQUEST_URL = API_URL;
+  if (limit > 0) {
+    REQUEST_URL += `limit=${limit}`;
+  }
+  if (rating > 0) {
+    REQUEST_URL += `&minimum_rating=${rating}`;
+  }
+  return fetch(REQUEST_URL)
+    .then((res) => res.json())
+    .then((json) => json.data.movies);
+};
+```
+
+- node-fetch, axios 등의 라이브러리 사용 가능
+- 리졸버 함수 내부에서 API 요청 후 목표 데이터 반환
+

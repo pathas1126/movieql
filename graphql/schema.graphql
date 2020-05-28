@@ -4,15 +4,8 @@ type Movie {
   rating: Float!
   summary: String!
   medium_cover_image: String!
-}
-
-type Detail {
-  id: Int!
-  title_long: String!
-  rating: Float!
-  language: String!
-  medium_cover_image: String!
   description_full: String!
+  language: String!
 }
 
 type Suggestions {
@@ -21,6 +14,6 @@ type Suggestions {
 
 type Query {
   movies(limit: Int, sort: String): [Movie]!
-  movie(id: Int!): Detail!
+  movie(id: Int!): Movie!
   suggestions(id: Int!): [Movie]!
 }

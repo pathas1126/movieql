@@ -425,3 +425,132 @@ export default () => {
 ## Apollo Client Developer Tools
 
 > 크롬 익스텐션, 캐시와 같은 아폴로 관련 정보를 볼 수 있음
+
+## Local State
+
+> API에서 넘어온 데이터를 수정할 수 있는 기능
+
+### 아폴로 클라이언트에 리졸버 등록
+
+> 아폴로 클라이언트 인스턴스를 생성하는 옵션에 리졸버 추가
+
+```javascript
+import ApolloClient from "apollo-boost";
+
+const client = new ApolloClient({
+  uri: "http://localhost:4000",
+  resolvers: {
+    Movie: {
+      isLiked: () => false,
+    },
+  },
+});
+
+export default client;
+```
+
+- resolvers 옵션에 GraphQL API에 등록되어 있는 타입과 동일한 타입에 대해 새로운 필드를 선언하고 그에 대한 리졸버를 등록
+
+### 쿼리에 클라이언트 데이터 설정하기
+
+> 프런트에서 보내는 쿼리에 임의로 추가한 필드가 클라이언트에서 선언한 것이라고 알리기
+
+```javascript
+// ...
+const GET_MOVIES = gql`
+  query {
+    movies(sort: "rating") {
+      id
+      medium_cover_image
+      isLiked @client
+    }
+  }
+`;
+// ...
+```
+
+- 새로 만든 필드 오른쪽에 telegraphq ql인 @client를 작성해서 해당 필드는 클라이언트 측에서 작성한 것이라고 알림
+- 프로젝트를 실행해 보면 에러가 발생하지 않는 것을 볼 수 있으며, 아폴로 개발자 도구를 확인해 보면 Movie 타입에 isLiked 라는 필드가 추가된 것을 볼 수 있음
+
+### 로컬 스테이트 Mutation
+
+> 아폴로 클라이언트 리졸버에 Mutation을 등록해서 로컬 스테이트 값을 수정할 수 있음
+
+#### 아폴로 클라이언트 리졸버에 Mutation 등록
+
+```javascript
+import ApolloClient from "apollo-boost";
+
+const client = new ApolloClient({
+  uri: "http://localhost:4000",
+  resolvers: {
+    Movie: {
+      isLiked: () => false,
+    },
+    Mutation: {
+      likeMovie: (_, { id }, { cache }) => {
+        cache.writeData({
+          id: `Movie:${id}`,
+          data: {
+            isLiked: true,
+          },
+        });
+      },
+    },
+  },
+});
+
+export default client;
+```
+
+- 리졸버에 등록하는 함수의 세 번째 매개변수는 context인데 그 안에 있는 cache를 사용할 수 있음
+- writeData를 이용해서 캐쉬에 저장된 데이터를 수정할 수 있음
+- 아폴로 개발자 도구에서 캐쉬를 확인해 보면 각 데이터의 아이디가 Movie:12312 와 같이 [타입:아이디] 형식으로 등록된 것을 볼 수 있고, 그에 맞추기 위해 writeData 함수의 옵션 객체의 id 값에 동일한 형식으로 id를 전달
+- 옵션 객체의 data의 값으로는 캐쉬에 등록된 Movie 타입이 갖는 모든 필드 사용 가능
+
+#### 컴포넌트에서 Mutation 사용하기
+
+> 리졸버에 등록한 뮤테이션을 컴포넌트에서 사용
+
+```jsx
+import React from "react";
+import { Link } from "react-router-dom";
+import styled from "styled-components";
+import { gql } from "apollo-boost";
+import { useMutation } from "@apollo/react-hooks";
+
+const LIKE_MOVIE = gql`
+  mutation LikeMovie($id: Int!) {
+    likeMovie(id: $id) @client
+  }
+`;
+
+// style code ...
+
+export default ({ id, bg, isLiked }) => {
+  const [likeMovie] = useMutation(LIKE_MOVIE, {
+    variables: { id: parseInt(id) },
+  });
+
+  return (
+    <Container>
+      <Link to={`/${id}`}>
+        <Poster bg={bg} />
+      </Link>
+      <span
+        style={{ color: "red", cursor: "pointer" }}
+        onClick={isLiked ? null : likeMovie}
+      >
+        {isLiked ? "♥" : "♡"}
+      </span>
+    </Container>
+  );
+};
+```
+
+- GraphQL 서버에서 매개변수를 동적으로 전달받을 때 작성했던 쿼리 형식과 동일한 형식으로 뮤테이션 작성
+- 로컬 스테이트를 등록할 때와 마찬가지로 @client를 표기해서 해당 뮤테이션이 클라이언트에서 이루어진다는 것을 아폴로 클라이언트에 알려야 함
+- 뮤테이션을 사용할 때는 @apollo/react-hooks의 useMutation을 사용하며 형식은 useQuery와 동일함
+  단, 반환값으로는 뮤테이션을 실행할 수 있는 함수를 반환
+- useMutation으로 반환받은 함수를 onClick 함수에 등록
+- 프로젝트를 실행하고 ♡를 클릭하면 ♥로 바뀌는 것을 볼 수 있음
